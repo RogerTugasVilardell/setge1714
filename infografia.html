@@ -135,11 +135,18 @@ svg#mapa:active{cursor:grabbing;}
   font-size:12.5px; font-family:'Merriweather',serif;
   color:#232323; line-height:1.35;
   max-width:240px; z-index:200; display:none;
+  max-height:calc(100vh - 16px); overflow-y:auto;
 }
 .info-popup b{font-family:'Merriweather',serif; font-weight:700;}
 .info-popup .pxf{font-family:'Roboto',sans-serif; font-weight:700;}
 .info-popup ul{margin:5px 0 0; padding:0; list-style:none;}
 .info-popup li{margin:0 0 2px;}
+.info-popup.ample{max-width:300px;}
+.info-popup p{margin:4px 0 0;}
+.info-popup .pop-flag{
+  display:block; width:118px; height:auto; margin:0 auto 7px;
+  border:1px solid rgba(0,0,0,0.25);
+}
 
 /* ---------- peu ---------- */
 .peu-pagina{
@@ -238,7 +245,7 @@ svg#mapa:active{cursor:grabbing;}
         <div id="zoom-controls">
           <button class="ctrl-btn" id="zoom-in" aria-label="Apropar">+</button>
           <button class="ctrl-btn" id="zoom-out" aria-label="Allunyar">&minus;</button>
-          <button class="ctrl-btn" id="zoom-reset" aria-label="Vista completa">&#9673;</button>
+          <button class="ctrl-btn wide" id="zoom-2026" aria-label="Vista completa: Barcelona el 2026">2026</button>
           <button class="ctrl-btn wide" id="zoom-1714" aria-label="Zoom a la ciutat de 1714">1714</button>
         </div>
       </div>
@@ -274,6 +281,8 @@ svg#mapa:active{cursor:grabbing;}
 
   <div class="info-popup" id="popup-borb"></div>
   <div class="info-popup" id="popup-def"></div>
+  <div class="info-popup ample" id="popup-flag-borb"></div>
+  <div class="info-popup ample" id="popup-flag-def"></div>
 
   <div class="peu-pagina">
     <div class="peu-textos">
@@ -312,9 +321,9 @@ const ESC = {
 };
 
 const SECS = [
-  { tit:'Homes combatents', esc:'A', info:true,
+  { tit:'Combatents', esc:'A', info:true,
     a:{v:39000, txt:'39.000'}, b:{v:7170, txt:'7.170'},
-    subA:[['63','batallons francesos'],['15','batallons espanyols'],['10','batallons estrangers']],
+    subA:[['63','batallons francesos'],['15','batallons espanyols'],['10','batallons multinacionals']],
     subB:[['2.000','Exèrcit de Catalunya'],['4.700','Coronela de Barcelona'],['470','Cavalleria catalana']] },
   { tit:'Morts i ferits totals', esc:'B',
     a:{v:12100, txt:'10.000 – 14.200'}, b:{v:7675, txt:'6.850 – 8.500'} },
@@ -371,7 +380,6 @@ function drawBandols(){
 
   const mob = isMobile();
   const MIN = mob ? 11 : 12.5;      // mida del peu de font: el terra de tot
-  const Fcol = MIN * 1.25;          // «Exèrcit borbònic» / «Defensors…»
   const Ftit = mob ? 11.5 : 13;     // titolets de magnitud
   const BW   = mob ? 15 : 17;       // diàmetre del botó «i»
 
@@ -382,6 +390,25 @@ function drawBandols(){
   const capW = Math.min((AW * 0.47 - 10) / 1.53, AW * 0.235);
   const targetR = Math.min(capW, AW * 0.06);
 
+  /* Etiquetes de columna: la mida més gran (fins al 125% del terra) que
+     deixa cada etiqueta i el seu botó «?» en una sola línia. El pressupost
+     d'amplada no és la columna sinó la separació real entre els dos eixos,
+     descomptant el que ocupa l'altra etiqueta; així l'etiqueta llarga pot
+     envair l'espai que la curta no fa servir. */
+  const LABS = ['Exèrcit borbònic', 'Defensors'];
+  const U = LABS.map(l => tw(l, fR(100, 700)) / 100);   // amplada per píxel de cos
+  const BQ = BW + 4;                                    // botó «?» més separació
+  const FcolMax = Math.min(
+    (0.96 * AW - 16 - 2 * BQ) / (U[0] + U[1]),          // que no s'ajuntin
+    (2 * (cx[0] - 2) - BQ) / U[0],                      // que no surti per l'esquerra
+    (2 * (TW - 2 - cx[1]) - BQ) / U[1]                  // ni per la dreta
+  );
+  const Fcol = clamp(FcolMax, MIN, MIN * 1.25);
+  const AMPLE_LAB = [
+    Math.min(2 * (0.48 * AW - 8) - (U[1] * Fcol + BQ) - BQ, 2 * (cx[0] - 2) - BQ),
+    Math.min(2 * (0.48 * AW - 8) - (U[0] * Fcol + BQ) - BQ, 2 * (TW - 2 - cx[1]) - BQ)
+  ];
+
   function build(Sf){
     const fvMax = mob ? 15 : 16;
 
@@ -390,8 +417,7 @@ function drawBandols(){
     const flagW = clamp(AW * (mob ? 0.21 : 0.18), 24, mob ? 46 : 56);
     const hBorb = flagW * RATIO_BORB, hBcn = flagW * RATIO_BCN;
     const flagH = Math.max(hBorb, hBcn);
-    const labLines = ['Exèrcit borbònic', 'Defensors']
-      .map(l => wrapWords(l, colW, fR(Fcol, 700)));
+    const labLines = LABS.map((l, i) => wrapWords(l, AMPLE_LAB[i], fR(Fcol, 700)));
     const nLab = Math.max(labLines[0].length, labLines[1].length);
     const labH = nLab * Fcol * 1.3;
     const headerH = flagH + 4 * Sf + labH + (mob ? 5 : 13) * Sf;
@@ -472,14 +498,40 @@ function drawBandols(){
   });
   y += B.flagH + 4 * B.Sf;
 
+  const AJUDA = [
+    ['popup-flag-borb', 'Què és la creu de Borgonya'],
+    ['popup-flag-def',  'Què és la bandera de Santa Eulàlia']
+  ];
   B.labLines.forEach((lines, i) => {
     lines.forEach((ln, j) => {
+      const ultima = j === lines.length - 1;
+      const yl = y + Fcol + j * Fcol * 1.3;
+      /* A l'última línia hi va el botó «?»: el text es desplaça mig botó cap
+         a l'esquerra perquè el conjunt quedi centrat sobre l'eix de la columna. */
+      const desp = ultima ? (BW + 4) / 2 : 0;
       svg.append('text')
-        .attr('x', cx[i]).attr('y', y + Fcol + j * Fcol * 1.3)
+        .attr('x', cx[i] - desp).attr('y', yl)
         .attr('text-anchor','middle')
         .style('font-family',"'Roboto',sans-serif").style('font-weight',700)
         .style('font-size', Fcol + 'px').style('fill','#232323')
         .text(ln);
+      if(!ultima) return;
+      const bx = cx[i] - desp + tw(ln, fR(Fcol, 700)) / 2 + 4 + BW / 2;
+      const by = yl - Fcol * 0.34;
+      const gq = svg.append('g')
+        .style('cursor','pointer')
+        .attr('role','button').attr('tabindex', 0).attr('aria-label', AJUDA[i][1]);
+      gq.append('circle')
+        .attr('cx', bx).attr('cy', by).attr('r', BW/2)
+        .attr('fill','#e8e8e0').attr('stroke','#bbb').attr('stroke-width',1);
+      gq.append('text')
+        .attr('x', bx).attr('y', by + MIN * 0.35)
+        .attr('text-anchor','middle')
+        .style('font-family',"'Roboto',sans-serif").style('font-weight',700)
+        .style('font-size', MIN + 'px').style('fill','#4f4f4f')
+        .style('pointer-events','none')
+        .text('?');
+      lligaInfo(gq.node(), document.getElementById(AJUDA[i][0]));
     });
   });
   y += B.labH + (mob ? 5 : 13) * B.Sf;
@@ -580,16 +632,41 @@ function lligaInfo(node, pop){
 }
 document.addEventListener('click', tancaPopups);
 
-/* Contingut dels dos popovers, muntat un sol cop a partir de les dades */
+/* Contingut dels popovers, muntat un sol cop a partir de les dades */
 (function muntaPopups(){
   const s = SECS[0];
   const llista = items => '<ul>' + items
     .map(it => '<li><span class="pxf">' + it[0] + '</span> ' + it[1] + '</li>')
     .join('') + '</ul>';
   document.getElementById('popup-borb').innerHTML =
-    '<b>39.000 homes borbònics</b>' + llista(s.subA);
+    '<b>39.000 combatents borbònics</b>' + llista(s.subA);
   document.getElementById('popup-def').innerHTML =
     '<b>7.170 defensors de la ciutat</b>' + llista(s.subB);
+
+  document.getElementById('popup-flag-borb').innerHTML =
+    '<img class="pop-flag" src="' + FLAG_BORB + '" alt="">' +
+    '<b>La creu de Borgonya</b>' +
+    '<p>Representació de l’aspa de sant Andreu, símbol originari de la casa ' +
+    'ducal de Borgonya que Felip el Bell va introduir als regnes hispànics a ' +
+    'començaments del segle XVI. Amb Carles I es va consolidar com un dels ' +
+    'principals emblemes militars de la Monarquia Hispànica i esdevingué ' +
+    'especialment característica dels Terços. Durant la Guerra de Successió, ' +
+    'com que formava part de la tradició militar de la monarquia, la van ' +
+    'utilitzar tant les tropes partidàries de l’arxiduc Carles com les de ' +
+    'Felip V. Aquest últim en va mantenir i reglamentar l’ús, incorporant-hi ' +
+    'elements heràldics borbònics. Per això la creu de Borgonya també ' +
+    'apareixia a les banderes de les tropes borbòniques que van assetjar ' +
+    'Barcelona el 1714.</p>';
+
+  document.getElementById('popup-flag-def').innerHTML =
+    '<img class="pop-flag" src="' + FLAG_BCN + '" alt="">' +
+    '<b>La bandera de Santa Eulàlia</b>' +
+    '<p>Ensenya protectora de Barcelona, dedicada a santa Eulàlia, patrona de ' +
+    'la ciutat. El seu penó militar es treia en moments de greu perill com a ' +
+    'símbol de mobilització i defensa de la ciutat. L’11 de setembre de 1714, ' +
+    'el conseller en cap Rafael Casanova el va portar al capdavant del ' +
+    'contraatac i va resultar ferit en els combats del baluard de Sant ' +
+    'Pere.</p>';
 })();
 
 /* ================= BLOC 2: EL MAPA ================= */
@@ -716,7 +793,7 @@ function drawMapa(force){
 
   d3.select('#zoom-in').on('click', () => svg.transition().duration(300).call(zoom.scaleBy, 2.2));
   d3.select('#zoom-out').on('click', () => svg.transition().duration(300).call(zoom.scaleBy, 1/2.2));
-  d3.select('#zoom-reset').on('click', () => svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity));
+  d3.select('#zoom-2026').on('click', () => svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity));
   d3.select('#zoom-1714').on('click', () => {
     const b = path.bounds(GEO_LIM);
     const w = b[1][0]-b[0][0], h = b[1][1]-b[0][1];
